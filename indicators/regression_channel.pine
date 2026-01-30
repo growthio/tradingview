@@ -1,0 +1,417 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Copywright © 2026 ZenithClown (Debmalya Pramanik) | https://zenithclown.github.io/ | https://www.linkedin.com/in/dpramanik
+
+//@version=6
+
+// ==================================================================
+// OBJECTTIVE: Create a Regression Channel & Forward Forecast
+//
+// A regression channel (linear, exponential, etc.) can potentially
+// show the movement of the market over a period of time. Typically
+// an instrument move in a direction thus a linear regression can be
+// useful to predict the potential flow, while exponential channel can
+// be useful for a crypto currency like asset.
+//
+// Check https://github.com/growthio/tradingview for details.
+// Check https://in.tradingview.com/u/ZenithClown/ for TV Profile.
+// ==================================================================
+
+indicator('Regression Channel', overlay = true)
+
+// ------------------------------------------------------------------
+// INPUT(s) for Regression Channel Calculation(s)
+// ------------------------------------------------------------------
+
+regressionType = input.string(
+    'linear', 'Regression Type'
+    , options = [
+        'linear', 'exponential'
+    ]
+)
+
+dataSource = input.source(close, 'Data Source')
+
+// Lookback and Forecast Period Settings
+
+lookbackPeriod = input.int(
+    100, 'Lookback Period (No. of Candels)', minval = 2, step = 1
+    , group = 'Model Settings'
+    , tooltip = 'Setting a value >= 5000 may result in a slow performance.'
+)
+
+// Channel Settings, allow dynamic upper and lower channel controls
+
+showUpperChannel = input.bool(
+    true, 'Show Upper Deviation Channel'
+    , group = 'Channel Settings', inline = 'Upper Channel'
+)
+
+upperChannelDeviation = input.float(
+    2.0, '', active = showUpperChannel, step = 0.1
+    , group = 'Channel Settings', inline = 'Upper Channel'
+)
+
+showLowerChannel = input.bool(
+    true, 'Show Lower Deviation Channel'
+    , group = 'Channel Settings', inline = 'Lower Channel'
+)
+
+lowerChannelDeviation = input.float(
+    2.0, '', active = showLowerChannel, step = 0.1
+    , group = 'Channel Settings', inline = 'Lower Channel'
+)
+
+nTopBottom = input.int(
+    2, 'No. of Channel(s) from Mean Line', minval = 1, maxval = 4, step = 1
+    , tooltip = 'Create multiple channels to understand market range.'
+    , group = 'Channel Settings'
+)
+
+// ------------------------------------------------------------------
+// Display Setting(s) for Forecast Period & Color(s)
+//
+// Display settings are defined of two types - general settings which
+// are applicable for all (ex. color settings) and regression model
+// specific settings. Check the group names for more details.
+// ------------------------------------------------------------------
+
+isLinearModel = regressionType == 'linear' ? true : false
+isExponentialModel = regressionType == 'exponential' ? true : false
+
+// Inputs for Linear Regression Model
+
+showPearsonInput = input.bool(
+    false, 'Show Pearsons R', active = isLinearModel
+    , group = 'Display Settings (Linear Model)'
+)
+
+// General Display - Line Extensions
+
+extendLeftInput = input.bool(
+    false, 'Extend Left Lines'
+    , group = 'Display Settings'
+    , tooltip = 'Extend to check when there was a reversal.'
+)
+
+extendRightInput = input.bool(
+    true, 'Extend Right Lines'
+    , group = 'Display Settings'
+    , tooltip = 'Extend to check potential market movement.'
+)
+
+// General Display - Color Settings
+
+colorUpperChannel = input.color(
+    color.new(color.green, 85), ''
+    , group = 'Display Settings', inline = 'Display Settings'
+)
+
+colorLowerChannel = input.color(
+    color.new(color.red, 85), ''
+    , group = 'Display Settings', inline = 'Display Settings'
+)
+
+// ------------------------------------------------------------------
+// Function(s)/Calculation(s) for Linear Regression & Deviation
+//
+// linearRegression - Function to calculate linear regression values,
+// namely the slope and intercept. The function uses `barstate.islast`
+// to prevent the model to recalculate on every candel (thus reducing
+// unnecessary load time) and calculates only when we've reached the
+// end of the loop.
+// ------------------------------------------------------------------
+
+linearRegression(source, length) =>
+    if not barstate.islast
+        [float(na), float(na), float(na)]
+    else
+        sumX = 0.0
+        sumY = 0.0
+        sumXY = 0.0
+        sumXSqr = 0.0
+
+        for i = 0 to length - 1 by 1
+            value = source[i]
+            perct = i + 1.0
+
+            sumX += perct
+            sumY += value
+            sumXY += perct * value
+            sumXSqr += math.pow(perct, 2)
+
+        slope = (length * sumXY - sumX * sumY) / (length * sumXSqr - math.pow(sumX, 2))
+
+        average = sumY / length
+        intercept = average - slope * sumX / length + slope
+
+        [slope, average, intercept]
+
+linearDeviation(source, length, slope, average, intercept) =>
+    upperDeviation = 0.0
+    lowerDeviation = 0.0
+
+    standardDeviationAccum = 0.0
+
+    dsxx = 0.0
+    dsyy = 0.0
+    dsxy = 0.0
+
+    periods = length - 1
+    daY = intercept + slope * periods / 2
+
+    interceptCopy = intercept
+
+    for i = 0 to periods by 1
+        price = high[i] - interceptCopy
+
+        if price > upperDeviation
+            upperDeviation := price
+
+        price := interceptCopy - low[i]
+
+        if price > lowerDeviation
+            lowerDeviation := price
+
+        price := source[i]
+        dxt = price - average
+        dyt = interceptCopy - daY
+
+        price -= interceptCopy
+        dsxx += math.pow(dxt, 2)
+        dsyy += math.pow(dyt, 2)
+        dsxy += dxt * dyt
+
+        interceptCopy += slope
+        
+    pearsonsR = dsxx == 0 or dsyy == 0 ? 0 : dsxy / math.sqrt(dsxx * dsyy)
+    standardDeviation = ta.stdev(source, length)
+    [standardDeviation, pearsonsR, upperDeviation, lowerDeviation]
+
+// ------------------------------------------------------------------
+// Function(s)/Calculation(s) for Exponential Regression & Deviation
+// ------------------------------------------------------------------
+
+exponentialRegression(source, length) =>
+    if not barstate.islast
+        [float(na), float(na), float(na)]
+    else
+        sumX = 0.0
+        sumY = 0.0
+        sumXY = 0.0
+        sumXSqr = 0.0
+
+        for i = 0 to length - 1 by 1
+            value = source[i]
+            perct = i + 1.0
+            
+            if value > 0
+                logValue = math.log(value)
+                
+                sumX += perct
+                sumY += logValue
+                sumXY += perct * logValue
+                sumXSqr += math.pow(perct, 2)
+
+        slope = (length * sumXY - sumX * sumY) / (length * sumXSqr - math.pow(sumX, 2))
+        
+        average = sumY / length
+        intercept = average - slope * sumX / length + slope
+        
+        [slope, average, intercept]
+
+exponentialDeviation(source, length, slope, average, intercept) =>
+    upperDeviation = 0.0
+    lowerDeviation = 0.0
+    
+    standardDeviationAccum = 0.0
+    
+    periods = length - 1
+    
+    for i = 0 to periods by 1
+        expValue = math.exp(intercept + slope * (periods - i))
+        
+        price = high[i] - expValue
+        
+        if price > upperDeviation
+            upperDeviation := price
+        
+        price := expValue - low[i]
+        
+        if price > lowerDeviation
+            lowerDeviation := price
+        
+        if source[i] > 0
+            residual = math.log(source[i]) - (intercept + slope * (periods - i))
+            standardDeviationAccum += math.pow(residual, 2)
+    
+    standardDeviation = math.sqrt(standardDeviationAccum / length)
+    
+    [standardDeviation, upperDeviation, lowerDeviation]
+
+// ------------------------------------------------------------------
+// Visualization of Regression, Forecast & Top/Bottom Bounds
+// ------------------------------------------------------------------
+
+labelPrefix = switch regressionType
+    'linear' => 'L'
+    'exponential' => 'E'
+    => na
+
+extendLineType = switch
+    extendLeftInput and extendRightInput => extend.both
+    extendLeftInput => extend.left
+    extendRightInput => extend.right
+    => extend.none
+
+switch regressionType
+    'linear' =>
+        [slope, average, intercept] = linearRegression(dataSource, lookbackPeriod)
+
+        startPriceLinReg = intercept + slope * (lookbackPeriod - 1)
+        endPriceLinReg = intercept
+
+        var line meanLineLinReg = na
+        if na(meanLineLinReg) and not na(startPriceLinReg)
+            meanLineLinReg := line.new(
+                bar_index - lookbackPeriod + 1, startPriceLinReg, bar_index, endPriceLinReg
+                , width = 1, extend = extendLineType, color = color.new(color.black, 0)
+            )
+        else
+            line.set_xy1(meanLineLinReg, bar_index - lookbackPeriod + 1, startPriceLinReg)
+            line.set_xy2(meanLineLinReg, bar_index, endPriceLinReg)
+
+        [standardDeviation, pearsonsR, upperDeviation, lowerDeviation] = linearDeviation(
+            dataSource, lookbackPeriod, slope, average, intercept
+        )
+
+        var array<line> upperChannels = array.new<line>(nTopBottom)
+        var array<line> lowerChannels = array.new<line>(nTopBottom)
+        var array<linefill> upperFills = array.new<linefill>(nTopBottom)
+        var array<linefill> lowerFills = array.new<linefill>(nTopBottom)
+
+        for i = 0 to nTopBottom - 1 by 1
+            upperMultiplier = (i + 1) * (showUpperChannel ? upperChannelDeviation : 1.0) / nTopBottom
+            lowerMultiplier = (i + 1) * (showLowerChannel ? lowerChannelDeviation : 1.0) / nTopBottom
+
+            upperStartPrice = startPriceLinReg + upperMultiplier * standardDeviation
+            upperEndPrice = endPriceLinReg + upperMultiplier * standardDeviation
+
+            lowerStartPrice = startPriceLinReg - lowerMultiplier * standardDeviation
+            lowerEndPrice = endPriceLinReg - lowerMultiplier * standardDeviation
+
+            if na(array.get(upperChannels, i)) and not na(upperStartPrice)
+                array.set(upperChannels, i, line.new(
+                    bar_index - lookbackPeriod + 1, upperStartPrice, bar_index, upperEndPrice
+                    , width = 1, extend = extendLineType, color = color.new(colorUpperChannel, 0)
+                ))
+            
+            gradientTransparency = int(85 + (100 - 85) * (i + 1) / nTopBottom)
+            baseLine = i == 0 ? meanLineLinReg : array.get(upperChannels, i - 1)
+            if not na(array.get(upperChannels, i)) and not na(baseLine)
+                if na(array.get(upperFills, i))
+                    array.set(upperFills, i, linefill.new(
+                        baseLine, array.get(upperChannels, i)
+                        , color.new(colorUpperChannel, gradientTransparency)
+                    ))
+                else
+                    linefill.set_color(array.get(upperFills, i), color.new(colorUpperChannel, gradientTransparency))
+
+            if na(array.get(lowerChannels, i)) and not na(lowerStartPrice)
+                array.set(lowerChannels, i, line.new(
+                    bar_index - lookbackPeriod + 1, lowerStartPrice, bar_index, lowerEndPrice
+                    , width = 1, extend = extendLineType, color = color.new(colorLowerChannel, 0)
+                ))
+            
+            gradientTransparency := int(85 + (100 - 85) * (i + 1) / nTopBottom)
+            baseLine := i == 0 ? meanLineLinReg : array.get(lowerChannels, i - 1)
+            if not na(array.get(lowerChannels, i)) and not na(baseLine)
+                if na(array.get(lowerFills, i))
+                    array.set(lowerFills, i, linefill.new(
+                        baseLine, array.get(lowerChannels, i)
+                        , color.new(colorLowerChannel, gradientTransparency)
+                    ))
+                else
+                    linefill.set_color(array.get(lowerFills, i), color.new(colorLowerChannel, gradientTransparency))
+
+        var label r = na
+        label.delete(r[1])
+
+        if showPearsonInput and not na(pearsonsR)
+            r := label.new(
+                bar_index - lookbackPeriod + 1, startPriceLinReg
+                , str.tostring(pearsonsR, 'R = #.#####')
+                , color = color.new(color.white, 100)
+                , textcolor = color.new(color.black, 0)
+                , size = size.normal, style = label.style_label_up
+            )
+
+    'exponential' =>
+        [slope, average, intercept] = exponentialRegression(dataSource, lookbackPeriod)
+
+        startPriceExpReg = math.exp(intercept + slope * (lookbackPeriod - 1))
+        endPriceExpReg = math.exp(intercept)
+
+        var line meanLineExpReg = na
+        if na(meanLineExpReg) and not na(startPriceExpReg)
+            meanLineExpReg := line.new(
+                bar_index - lookbackPeriod + 1, startPriceExpReg, bar_index, endPriceExpReg
+                , width = 1, extend = extendLineType, color = color.new(color.black, 0)
+            )
+        else
+            line.set_xy1(meanLineExpReg, bar_index - lookbackPeriod + 1, startPriceExpReg)
+            line.set_xy2(meanLineExpReg, bar_index, endPriceExpReg)
+
+        [standardDeviation, upperDeviation, lowerDeviation] = exponentialDeviation(
+            dataSource, lookbackPeriod, slope, average, intercept
+        )
+
+        var array<line> upperChannelsExp = array.new<line>(nTopBottom)
+        var array<line> lowerChannelsExp = array.new<line>(nTopBottom)
+        var array<linefill> upperFillsExp = array.new<linefill>(nTopBottom)
+        var array<linefill> lowerFillsExp = array.new<linefill>(nTopBottom)
+
+        for i = 0 to nTopBottom - 1 by 1
+            upperMultiplier = (i + 1) * (showUpperChannel ? upperChannelDeviation : 1.0) / nTopBottom
+            lowerMultiplier = (i + 1) * (showLowerChannel ? lowerChannelDeviation : 1.0) / nTopBottom
+
+            upperStartPrice = math.exp(intercept + slope * (lookbackPeriod - 1) + upperMultiplier * standardDeviation)
+            upperEndPrice = math.exp(intercept + upperMultiplier * standardDeviation)
+
+            lowerStartPrice = math.exp(intercept + slope * (lookbackPeriod - 1) - lowerMultiplier * standardDeviation)
+            lowerEndPrice = math.exp(intercept - lowerMultiplier * standardDeviation)
+
+            if na(array.get(upperChannelsExp, i)) and not na(upperStartPrice)
+                array.set(upperChannelsExp, i, line.new(
+                    bar_index - lookbackPeriod + 1, upperStartPrice, bar_index, upperEndPrice
+                    , width = 1, extend = extendLineType, color = color.new(colorUpperChannel, 0)
+                ))
+            
+            gradientTransparency = int(85 + (100 - 85) * (i + 1) / nTopBottom)
+            baseLine = i == 0 ? meanLineExpReg : array.get(upperChannelsExp, i - 1)
+            if not na(array.get(upperChannelsExp, i)) and not na(baseLine)
+                if na(array.get(upperFillsExp, i))
+                    array.set(upperFillsExp, i, linefill.new(
+                        baseLine, array.get(upperChannelsExp, i)
+                        , color.new(colorUpperChannel, gradientTransparency)
+                    ))
+                else
+                    linefill.set_color(array.get(upperFillsExp, i), color.new(colorUpperChannel, gradientTransparency))
+
+            if na(array.get(lowerChannelsExp, i)) and not na(lowerStartPrice)
+                array.set(lowerChannelsExp, i, line.new(
+                    bar_index - lookbackPeriod + 1, lowerStartPrice, bar_index, lowerEndPrice
+                    , width = 1, extend = extendLineType, color = color.new(colorLowerChannel, 0)
+                ))
+            
+            gradientTransparency := int(85 + (100 - 85) * (i + 1) / nTopBottom)
+            baseLine := i == 0 ? meanLineExpReg : array.get(lowerChannelsExp, i - 1)
+            if not na(array.get(lowerChannelsExp, i)) and not na(baseLine)
+                if na(array.get(lowerFillsExp, i))
+                    array.set(lowerFillsExp, i, linefill.new(
+                        baseLine, array.get(lowerChannelsExp, i)
+                        , color.new(colorLowerChannel, gradientTransparency)
+                    ))
+                else
+                    linefill.set_color(array.get(lowerFillsExp, i), color.new(colorLowerChannel, gradientTransparency))
+
+    => display.none

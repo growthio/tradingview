@@ -1,0 +1,167 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Copywright © 2026 ZenithClown (Debmalya Pramanik) | https://zenithclown.github.io/ | https://www.linkedin.com/in/dpramanik/
+
+//@version=6
+
+// ==================================================================
+// OBJECTTIVE: Marks the High & Low of a Time Range for a Security
+//
+// A range breakout strategy involves identifying a price range and
+// trading in the direction of a breakout once the price moves beyond
+// the established support or resistance levels. This scripts tries to
+// perform a back testing on the underlying security.
+//
+// Check https://github.com/growthio/tradingview for details.
+// Check https://in.tradingview.com/u/ZenithClown/ for TV Profile.
+// ==================================================================
+
+indicator('Range Breakout', overlay = true)
+
+// ------------------------------------------------------------------
+// INPUT(s) for Range Selection | Group Name: Range Window
+// ------------------------------------------------------------------
+
+trackTimePeriod = input.session(
+    "0930-1030", "Session Time Range", group = "Range Window"
+    , tooltip = "Time Range (HH:MM) to Track Security"
+)
+
+drawTimePeriod = input.session(
+    "1030-1530", "Draw H/L Line for Range", group = "Range Window"
+    , tooltip = "Time Range (HH:MM) to Draw High/Low Line"
+)
+
+// ------------------------------------------------------------------
+// INPUT(s) for Color Selection | Group Name: Color & Window Config
+// ------------------------------------------------------------------
+
+showTrackingWindow = input.bool(
+    false, "Highlight Tracking Window", group = "Color & Window Config"
+)
+
+highLineColor = input.color(
+    color.new(#26A691, 0), "High Line Color"
+    , group = "Color & Window Config", inline = "HLLINE"
+)
+
+lowLineColor = input.color(
+    color.new(#EF5350, 0), "Low Line Color"
+    , group = "Color & Window Config", inline = "HLLINE"
+)
+
+middleLineColor = input.color(
+    color.black, "Middle Line Color"
+    , group = "Color & Window Config", inline = "HLLINE"
+)
+
+rangeBgColor = input.color(
+    color.new(color.yellow, 85), "Range Background Color"
+    , group = "Color & Window Config"
+)
+
+// ------------------------------------------------------------------
+// Time Zone Settings | Use the timezone that is currently active,
+// based on this, mark the range and then calculate the strategy.
+// ------------------------------------------------------------------
+
+tz = syminfo.timezone
+
+// ------------------------------------------------------------------
+// Session Date/Time Parsing Helper Function(s)
+// ------------------------------------------------------------------
+
+parseSessionTime(string value, int start) =>
+    int startH = int(math.round(str.tonumber(str.substring(
+        value, start, start + 2
+    ))))
+    int startM = int(math.round(str.tonumber(str.substring(
+        value, start + 2, start + 4
+    ))))
+
+    startH * 60 + startM
+
+rangeStartTime = parseSessionTime(trackTimePeriod, 0)
+rangeFinalTime = parseSessionTime(trackTimePeriod, 5)
+displayStartTime = parseSessionTime(drawTimePeriod, 0)
+displayFinalTime = parseSessionTime(drawTimePeriod, 5)
+
+// Check time settings, if not valid return runtime error
+if rangeFinalTime <= rangeStartTime
+    runtime.error("Tracking Session end must be after start.")
+if displayFinalTime <= displayStartTime
+    runtime.error("Drawing Session end must be after start.")
+
+// Check if the Current Time in Range/Draw Phase/None
+currentTime = hour(time, tz) * 60 + minute(time, tz)
+
+inTrackRange = (
+    currentTime >= rangeStartTime and currentTime <= rangeFinalTime
+)
+
+inDrawRange = (
+    currentTime >= displayStartTime and currentTime <= displayFinalTime
+)
+
+// ------------------------------------------------------------------
+// Get the Track Time Period High/Low Range and Reset on Every Day
+// ------------------------------------------------------------------
+
+newDay = ta.change(time("D")) != 0
+
+var float rangeHi = na
+var float rangeLo = na
+
+// Define the calculated lines, then draw them in sequence
+var array<line> hiLines = array.new<line>()
+var array<line> loLines = array.new<line>()
+
+// Calculate middle line, (high+low)/2 and then draw in sequence
+var array<line> midLines = array.new<line>()
+
+if newDay
+    rangeHi := na
+    rangeLo := na
+
+if inTrackRange
+    rangeHi := na(rangeHi) ? high : math.max(rangeHi, high)
+    rangeLo := na(rangeLo) ? low  : math.min(rangeLo, low)
+
+enterDraw = (
+    inDrawRange and not inDrawRange[1] and not na(rangeHi) and not na(rangeLo)
+)
+
+// ------------------------------------------------------------------
+// Visualization of Range High/Low and Session Range Period
+// ------------------------------------------------------------------
+if enterDraw
+    newHi = line.new(
+        bar_index, rangeHi, bar_index, rangeHi, color = highLineColor
+    )
+    newLo = line.new(
+        bar_index, rangeLo, bar_index, rangeLo, color = lowLineColor
+    )
+
+    array.push(hiLines, newHi)
+    array.push(loLines, newLo)
+
+    newMid = line.new(
+        bar_index, (rangeHi + rangeLo) / 2, bar_index, (rangeHi + rangeLo) / 2, color = middleLineColor
+    )
+
+    array.push(midLines, newMid)
+
+if inDrawRange and not enterDraw and array.size(hiLines) > 0 and array.size(loLines) > 0
+    curHi = array.last(hiLines)
+    curLo = array.last(loLines)
+
+    if not na(curHi)
+        line.set_x2(curHi, bar_index)
+    if not na(curLo)
+        line.set_x2(curLo, bar_index)
+
+    curMid = array.last(midLines)
+
+    if not na(curMid)
+        line.set_x2(curMid, bar_index)
+
+bgcolor(showTrackingWindow and inTrackRange ? rangeBgColor : na, title = "Tracking Window")

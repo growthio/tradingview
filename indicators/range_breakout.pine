@@ -1,0 +1,77 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Copywright © 2026 ZenithClown (Debmalya Pramanik) | https://zenithclown.github.io/ | https://www.linkedin.com/in/dpramanik/
+
+//@version=6
+
+// ==================================================================
+// OBJECTTIVE: Marks the High & Low of a Time Range for a Security
+//
+// A range breakout strategy involves identifying a price range and
+// trading in the direction of a breakout once the price moves beyond
+// the established support or resistance levels. This scripts tries to
+// perform a back testing on the underlying security.
+//
+// Check https://github.com/growthio/tradingview for details.
+// Check https://in.tradingview.com/u/ZenithClown/ for TV Profile.
+// ==================================================================
+
+indicator("Range Breakout", overlay = true)
+
+import ZenithClown/rangeBreakout/1 as rangeBreakout
+
+// ------------------------------------------------------------------
+// INPUT(s) for Range Selection | Group Name: Range Window
+// ------------------------------------------------------------------
+
+trackTimePeriod = input.session(
+    "0930-1030", "Session Time Range", group = "Range Window"
+    , tooltip = "Time Range (HH:MM) to Track Security"
+)
+
+drawTimePeriod = input.session(
+    "1030-1530", "Draw H/L Line for Range", group = "Range Window"
+    , tooltip = "Time Range (HH:MM) to Draw High/Low Line"
+)
+
+maxLookbackDays = input.int(
+    1, "Max Lookback Days", minval = 1, group = "Range Window"
+    , tooltip = "Number of Historic Days to Compute"
+)
+
+// ------------------------------------------------------------------
+// INPUT(s) for Color Selection | Group Name: Color & Window Config
+// ------------------------------------------------------------------
+
+showTrackingWindow = input.bool(
+    false, "Highlight Tracking Window", group = "Color & Window Config"
+)
+
+highLineColor = input.color(
+    color.new(#26A691, 0), "High Line Color"
+    , group = "Color & Window Config", inline = "HLLINE"
+)
+
+lowLineColor = input.color(
+    color.new(#EF5350, 0), "Low Line Color"
+    , group = "Color & Window Config", inline = "HLLINE"
+)
+
+middleLineColor = input.color(
+    color.black, "Middle Line Color"
+    , group = "Color & Window Config", inline = "HLLINE"
+)
+
+rangeBgColor = input.color(
+    color.new(color.yellow, 85), "Range Background Color"
+    , group = "Color & Window Config"
+)
+
+// ------------------------------------------------------------------
+// Call `rangeBreakout()` and Draw on Chart with Overlay Setting
+// ------------------------------------------------------------------
+
+[rangeHi, rangeLo, inTrackRange] = rangeBreakout.markRange(
+    trackTimePeriod, drawTimePeriod, highLineColor, lowLineColor, middleLineColor, maxLookbackDays
+)
+
+bgcolor(showTrackingWindow and inTrackRange ? rangeBgColor : na, title = "Tracking Window")

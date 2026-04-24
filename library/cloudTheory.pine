@@ -85,7 +85,10 @@ export drawCloud(
 //
 // The function uses two "EMA Cloud [drawCloud()]" to determine the
 // momentum of the stock. The function tries to calculate short-,
-// medium- and long-term momentum of the underlying security.
+// medium- and long-term momentum of the underlying security. In
+// addition, the function calculates if the condition is improving or
+// deteoriating. The condition is a simple rule - checks if the cloud
+// gap (between the fast and slow EMA) is increasing or decreasing.
 //
 // @param shortFast - Short Cloud's Fast EMA Length
 // @param shortSlow - Short Cloud's Slow EMA Length

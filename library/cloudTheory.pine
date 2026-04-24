@@ -62,9 +62,6 @@ export drawCloud(
     simple int fastLength
     , simple int slowLength
     , series float src = close
-    , simple color bullColor = color.new(color.green, 70)
-    , simple color bearColor = color.new(color.red, 70)
-    , simple color neutralColor = color.new(color.gray, 70)
 ) =>
     emaFast = ta.ema(src, fastLength)
     emaSlow = ta.ema(src, slowLength)
@@ -74,12 +71,4 @@ export drawCloud(
     isBullish = src > emaFast and src > emaSlow
     isBearish = src < emaFast and src < emaSlow
 
-    fillColor = isBullish ? bullColor : isBearish ? bearColor : neutralColor
-
-    // hide the actual ema lines, use the fill color flags only
-    pFast = plot(emaFast, "Fast EMA", color = color.new(color.white, 100), display = display.none)
-    pSlow = plot(emaSlow, "Slow EMA", color = color.new(color.white, 100), display = display.none)
-
-    fill(pFast, pSlow, color = fillCol, title = "Cloud Region")
-
-    [emaFast, emaSlow]
+    [emaFast, emaSlow, isBullish, isBearish]

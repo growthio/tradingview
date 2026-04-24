@@ -6,19 +6,9 @@
 
 <div align = "justify">
 
-This project and the associated service are provided solely for the purpose of offering a structured framework to organize,
-store, and manage data for the analysis of macroeconomic factors. The project is intended to support research, learning,
-experimentation, and analytical use cases only.
-
-## Data Source and Availibility
-
-The project may include certain **non-sensitive** data that is available in the *public domain* or from publicaly accessible
-sources. Such data is provided strictly for convinence, demonstrations, or illustrative purposes only.
-
-Not all data used, referenced, or compatible with this project is distributed with it. Any additional data used by the
-organization, contributors, or users may be proprietary, confidential, licensed, or otherwise restricted and will not be
-shared publicly. The organization and contributors are under **no obligation** to provide, disclose, or distribute any
-non-public, proprietary, licensed, or internal datasets.
+This project and the associated service are provided solely for educational purposes only. It is recommended that you are
+aware about the risks associated with the security, commodities, currency markets and have a basic knowledge about investing
+principle before using this service.
 
 ## No Advice Notice
 
@@ -32,9 +22,6 @@ analyzed using this project are done at the user’s own risk.
 
 While reasonable efforts may be made to ensure correctness, the data structures, sample data, and analytical outputs provided
 by this project are offered "as is", without any guarantees regarding accuracy, completeness, timeliness, or reliability.
-
-Macroeconomic data is subject to revisions, interpretation differences, and contextual limitations. The organization does not
-warrant that results derived from this project will be correct, complete, or suitable for any particular purpose.
 
 ## Limitation of Liability
 

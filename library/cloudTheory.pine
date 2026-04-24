@@ -1,0 +1,85 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Copywright © 2026 ZenithClown (Debmalya Pramanik) | https://zenithclown.github.io/ | https://www.linkedin.com/in/dpramanik/
+
+//@version=6
+
+// ==================================================================
+// OBJECTTIVE: A Combination of EMA to Draw Cloud Pattern on Chart
+//
+// The "2-EMA Line System" is one of the most oldest and durable
+// frameworks in technical analysis where we plot one "fast" (short)
+// and one "slow" (long) exponential moving average line on the same
+// chart and their relationships determine the state of the security.
+//
+// Fast/Short Exponential Moving Average Line
+// ------------------------------------------
+//
+// The fast exponential moving average line (often also called the
+// short moving average line) captures the current rhythm.
+//
+// Slow/Long Exponential Moving Average Line
+// -----------------------------------------
+//
+// The slow exponential moving average line (often also called the
+// long moving average line) captures the underlying drift.
+//
+// Example/Usage(s) of EMA Pairs
+// -----------------------------
+//
+// EMA Pairs serves different purposes. Here are an example of typical
+// pairs that are used in institutions, market research and other
+// published strategies:
+//
+// Scalping/Intraday Momentum [5, 13] - Linda Raschke's Classic Fast
+// Pair; Very Reactive. Recommended Timeframe: 5-15 mins. Chart
+//
+// Short-Term Swing/Intraday Trend [7, 21] - Popular on Crypto and NSE
+// (Indian Securities); Catches Multi-Day Momentum.
+//
+// Short-Term Swing [9, 21] - Slight Variation, Popular on FOREX and
+// Futures Desks.
+//
+// Institutional Gold Standard [50, 200] - The most watched global
+// standard. The crossover strategy are (I) "Golden Crossover" when
+// the 50 EMA crosses above 200 EMA and (II) "Death Crossover" occurs
+// when the 50 EMA falls below the 200 EMA line.
+//
+// Cloud Theory: Generate a Colored Cloud
+// --------------------------------------
+//
+// The cloud theory is a self-designed theory which uses any two EMA
+// lines as base and draws a shaded region. Combination of multiple
+// such trends gives the ability to create a long-/short-term trading
+// strategy based on the cloud coverage.
+//
+// Check https://github.com/growthio/tradingview for details.
+// Check https://in.tradingview.com/u/ZenithClown/ for TV Profile.
+// ==================================================================
+
+library('cloudTheory', overlay = true)
+
+export drawCloud(
+    simple int fastLength
+    , simple int slowLength
+    , series float src = close
+    , simple color bullColor = color.new(color.green, 70)
+    , simple color bearColor = color.new(color.red, 70)
+    , simple color neutralColor = color.new(color.gray, 70)
+) =>
+    emaFast = ta.ema(src, fastLength)
+    emaSlow = ta.ema(src, slowLength)
+
+    // determine the candle in which zone: bullish/bearish/neutra
+    // also, based on the same create the color line condition check
+    isBullish = src > emaFast and src > emaSlow
+    isBearish = src < emaFast and src < emaSlow
+
+    fillColor = isBullish ? bullColor : isBearish ? bearColor : neutralColor
+
+    // hide the actual ema lines, use the fill color flags only
+    pFast = plot(emaFast, "Fast EMA", color = color.new(color.white, 100), display = display.none)
+    pSlow = plot(emaSlow, "Slow EMA", color = color.new(color.white, 100), display = display.none)
+
+    fill(pFast, pSlow, color = fillCol, title = "Cloud Region")
+
+    [emaFast, emaSlow]

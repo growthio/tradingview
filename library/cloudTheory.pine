@@ -11,20 +11,13 @@
 // and one "slow" (long) exponential moving average line on the same
 // chart and their relationships determine the state of the security.
 //
-// Fast/Short Exponential Moving Average Line
-// ------------------------------------------
+// Cloud Theory: Generate a Colored Shaded Cloud based on EMA Pairs
 //
-// The fast exponential moving average line (often also called the
-// short moving average line) captures the current rhythm.
-//
-// Slow/Long Exponential Moving Average Line
-// -----------------------------------------
-//
-// The slow exponential moving average line (often also called the
-// long moving average line) captures the underlying drift.
+// The cloud theory is inspired from "SD Cloud Master Indicator" in
+// TradingView. This provides configurable length and EMA Lenghts to
+// create a long-/short-term trading strategy based on the coverage.
 //
 // Example/Usage(s) of EMA Pairs
-// -----------------------------
 //
 // EMA Pairs serves different purposes. Here are an example of typical
 // pairs that are used in institutions, market research and other
@@ -44,19 +37,32 @@
 // the 50 EMA crosses above 200 EMA and (II) "Death Crossover" occurs
 // when the 50 EMA falls below the 200 EMA line.
 //
-// Cloud Theory: Generate a Colored Cloud
-// --------------------------------------
-//
-// The cloud theory is a self-designed theory which uses any two EMA
-// lines as base and draws a shaded region. Combination of multiple
-// such trends gives the ability to create a long-/short-term trading
-// strategy based on the cloud coverage.
-//
 // Check https://github.com/growthio/tradingview for details.
 // Check https://in.tradingview.com/u/ZenithClown/ for TV Profile.
 // ==================================================================
 
 library('cloudTheory', overlay = true)
+
+// ------------------------------------------------------------------
+// Function Implementation: Draw Shaded Cloud based on EMA Pairs
+//
+// The function captures the two EMA length and based on which it
+// determines if the underlying security is in a bullish or bearish
+// or neutral phase. The flag and the EMA values can then be used to
+// calculate and draw shaded cloud using a TradingView Indicator.
+//
+// @param fastLength - Fast EMA Length, the shorter length which
+//  typically determines the current rhythm of the security.
+//
+// @param slowLength - Slow EMA Length, the longer length which
+//   determines the underlying drift of the security.
+//
+// @param src - Which value of the candle should be used to calculate
+//  the moving average; defaults to candle close value.
+//
+// @returns [emaFast, emaSlow, isBullish, isBearish, isNeutral] - EMA
+//  Values and the flags to determine the current sentiment.
+// ------------------------------------------------------------------
 
 export drawCloud(
     simple int fastLength
@@ -70,5 +76,42 @@ export drawCloud(
     // also, based on the same create the color line condition check
     isBullish = src > emaFast and src > emaSlow
     isBearish = src < emaFast and src < emaSlow
+    isNeutral = isBullish or isBearish ? false : true
 
-    [emaFast, emaSlow, isBullish, isBearish]
+    [emaFast, emaSlow, isBullish, isBearish, isNeutral]
+
+// ------------------------------------------------------------------
+// Function Implementation: Momentum Strategy using 2 EMA Cloud
+//
+// The function uses two "EMA Cloud [drawCloud()]" to determine the
+// momentum of the stock. The function tries to calculate short-,
+// medium- and long-term momentum of the underlying security.
+//
+// @param shortFast - Short Cloud's Fast EMA Length
+// @param shortSlow - Short Cloud's Slow EMA Length
+// @param longFast - Long Cloud's Fast EMA Length
+// @param longSlow - Long Cloud's Slow EMA Length
+//
+// @param src - Which value of the candle should be used to calculate
+//  the moving average; defaults to candle close value.
+//
+// @param momentumLength - A fixed historic candle lookback length
+//  that determines the short-, medium- and long-term momentum of the
+//  underlying security based on the short and the long cloud.
+// ------------------------------------------------------------------
+
+export momentumCloud(
+    simple int shortFast
+    , simple int shortSlow
+    , simple int longFast
+    , simple int longSlow
+    , series float src = close
+    , simple int momentumLength = 21
+) =>
+    [sEMAF, sEMAS, shortBullF, shortBearF, shortNeutralF] = drawCloud(
+        shortFast, shortSlow, src
+    )
+
+    [lEMAF, lEMAS, longBullF, longBearF, longNeutralF] = drawCloud(
+        longFast, longSlow, src
+    )

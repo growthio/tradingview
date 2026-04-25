@@ -60,8 +60,10 @@ library('cloudTheory', overlay = true)
 // @param src - Which value of the candle should be used to calculate
 //  the moving average; defaults to candle close value.
 //
-// @returns [emaFast, emaSlow, isBullish, isBearish, isNeutral] - EMA
-//  Values and the flags to determine the current sentiment.
+// @returns [emaFast, emaSlow, mktSentiment] - EMA Values and a flag
+// to determine the market sentiment. The sentiment flag can be read
+// as: (I) '1' the security is bullish, (II) '-1' the security is
+// bearish and (III) '0' denotes the security is neutral. 
 // ------------------------------------------------------------------
 
 export drawCloud(
@@ -72,13 +74,14 @@ export drawCloud(
     emaFast = ta.ema(src, fastLength)
     emaSlow = ta.ema(src, slowLength)
 
-    // determine the candle in which zone: bullish/bearish/neutra
+    // determine the candle in which zone: bullish/bearish/neutral
     // also, based on the same create the color line condition check
-    isBullish = src > emaFast and src > emaSlow
-    isBearish = src < emaFast and src < emaSlow
-    isNeutral = isBullish or isBearish ? false : true
+    mktSentiment = (
+        src > emaFast and src > emaSlow ? 1 :
+        src < emaFast and src < emaSlow ? -1 : 0
+    )
 
-    [emaFast, emaSlow, isBullish, isBearish, isNeutral]
+    [emaFast, emaSlow, mktSentiment]
 
 // ------------------------------------------------------------------
 // Function Implementation: Momentum Strategy using 2 EMA Cloud
@@ -111,10 +114,23 @@ export momentumCloud(
     , series float src = close
     , simple int momentumLength = 21
 ) =>
-    [sEMAF, sEMAS, shortBullF, shortBearF, shortNeutralF] = drawCloud(
+    [sEMAF, sEMAS, shortSentiment] = drawCloud(
         shortFast, shortSlow, src
     )
 
-    [lEMAF, lEMAS, longBullF, longBearF, longNeutralF] = drawCloud(
+    [lEMAF, lEMAS, longSentiment] = drawCloud(
         longFast, longSlow, src
     )
+
+    // ? calculate the gap b/w the short and long cloud
+    sCloudGap = sEMAF - sEMAS
+    lCloudGap = lEMAF - lEMAS
+
+    sCloudNGap = sCloudGap[momentumLength]
+    lCloudNGap = lCloudGap[momentumLength]
+
+    // ! determine if the short/long is improving
+    isShtImp = math.abs(sCloudGap) > math.abs(sCloudNGap)
+    isLgnImp = math.abs(lCloudGap) > math.abs(lCloudNGap)
+
+    [sEMAF, sEMAS, shortSentiment, lEMAF, lEMAS, longSentiment]

@@ -60,10 +60,12 @@ library('cloudTheory', overlay = true)
 // @param src - Which value of the candle should be used to calculate
 //  the moving average; defaults to candle close value.
 //
-// @returns [emaFast, emaSlow, mktSentiment] - EMA Values and a flag
-// to determine the market sentiment. The sentiment flag can be read
-// as: (I) '1' the security is bullish, (II) '-1' the security is
-// bearish and (III) '0' denotes the security is neutral. 
+// @returns [emaFast, emaSlow, mktSentiment, *Cross] - EMA Values and
+// a flag to determine the market sentiment. The sentiment flag can be
+// read as: (I) '1' the security is bullish, (II) '-1' the security is
+// bearish and (III) '0' denotes the security is neutral. The last two
+// values returned are the "EMA Cross" points. These values can be
+// directly used to determine the trend and set and altert.
 // ------------------------------------------------------------------
 
 export drawCloud(
@@ -81,7 +83,11 @@ export drawCloud(
         src < emaFast and src < emaSlow ? -1 : 0
     )
 
-    [emaFast, emaSlow, mktSentiment]
+    // add the cross over points and return points
+    upCross = ta.crossover(emaFast, emaSlow)
+    dnCross = ta.crossunder(emaFast, emaSlow)
+
+    [emaFast, emaSlow, mktSentiment, upCross, dnCross]
 
 // ------------------------------------------------------------------
 // Function Implementation: Momentum Strategy using 2 EMA Cloud
@@ -114,11 +120,11 @@ export momentumCloud(
     , series float src = close
     , simple int momentumLength = 21
 ) =>
-    [sEMAF, sEMAS, shortSentiment] = drawCloud(
+    [sEMAF, sEMAS, shortSentiment, _, _] = drawCloud(
         shortFast, shortSlow, src
     )
 
-    [lEMAF, lEMAS, longSentiment] = drawCloud(
+    [lEMAF, lEMAS, longSentiment, _, _] = drawCloud(
         longFast, longSlow, src
     )
 

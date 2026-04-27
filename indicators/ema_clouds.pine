@@ -41,19 +41,49 @@ indicator("EMA Cloud", overlay = true)
 
 // ------------------------------------------------------------------
 // INPUT(s) for EMA Cloud Pair(s) to Determine Underlying Movement
+//
+// Give the option to chose user-required source settings which is
+// passed as a series value to the library function.
 // ------------------------------------------------------------------
 
 src = input.source(
-    close, 'Candle Source', group = 'EMA Pair Settings'
+    close, 'Candle Source'
 )
 
-fastLength = input.int(
-    7, "Fast EMA Length", group = "EMA Pair Settings"
+// ------------------------------------------------------------------
+// INPUT(s) for Settings for the Short Cloud - Determines Short Trend
+//
+// This controls the "short cloud" which is a pair of EMA length of
+// shorter length. The cloud determines the current rhythm of the
+// market within a range of two smaller lengths.
+// ------------------------------------------------------------------
+
+shortFast = input.int(
+    7, "Fast Length", group = "Short Cloud", inline = "SCL"
 )
 
-slowLength = input.int(
-    21, "Slow EMA Length", group = "EMA Pair Settings"
+shortSlow = input.int(
+    21, "Slow Length", group = "Short Cloud", inline = "SCL"
 )
+
+// ------------------------------------------------------------------
+// INPUT(s) for Settings for the Long Cloud - Determines Long Trend
+//
+// This controls the "long cloud" which determines the securities'
+// underlying drift for a two longer EMA pairs.
+// ------------------------------------------------------------------
+
+longFast = input.int(
+    30, "Fast Length", group = "Long Cloud", inline = "LCL"
+)
+
+longSlow = input.int(
+    74, "Slow Length", group = "Long Cloud", inline = "LCL"
+)
+
+// ------------------------------------------------------------------
+// INPUT(s) for Settings for the Cloud Color based on the Sentiment
+// ------------------------------------------------------------------
 
 bullColor = input.color(
     color.new(color.green, 70), "BULL"
@@ -71,34 +101,78 @@ neutralColor = input.color(
 )
 
 // ------------------------------------------------------------------
+// INPUT(s) for Settings for Displaying the EMA Cross
+//
+// EMA Cross is the "pivotal" point which may indicate that there is
+// a changeover in the underlying security. It is recommended that the
+// "short cloud" EMA cross is ignored (default false) as they might
+// introduce too many noise - however, these signals can be useful for
+// an intraday setup when the overall drift ("longer cloud") has the
+// opposite signal.
+//
+// EMA Cross is an indicator integrated into "Cloud Theory" which is
+// inspired from the "EMA Cross Indicator" by d.mark165 user. The
+// indicator is same, with additional controls.
+// ------------------------------------------------------------------
+
+markShortCross = input.bool(
+    false, "Mark Short Cloud Crossings"
+    , group = "Indicate EMA Cross"
+)
+
+markLongCross = input.bool(
+    true, "Mark Long Cloud Crossings"
+    , group = "Indicate EMA Cross"
+)
+
+// ------------------------------------------------------------------
 // Import Trading View Library & Get Values
 // ------------------------------------------------------------------
 
 import ZenithClown/cloudTheory/2 as cloudTheory
 
-[emaFast, emaSlow, mktSentiment] = cloudTheory.drawCloud(
-    fastLength, slowLength, close
+[sEMAFast, sEMASlow, sMktSentiment, sUpCross, sDnCross] = cloudTheory.drawCloud(
+    shortFast, shortSlow, src
 )
 
-fillCol = mktSentiment == 1 ? bullColor : mktSentiment == -1 ? bearColor : neutralColor
-
-pFast = plot(emaFast, "Fast EMA", color = color.new(color.black, 20), display = display.none)
-pSlow = plot(emaSlow, "Slow EMA", color = color.new(color.black, 20), display = display.none)
-fill(pFast, pSlow, color = fillCol, title = "EMA Cloud")
+[lEMAFast, lEMASlow, lMktSentiment, lUpCross, lDnCross] = cloudTheory.drawCloud(
+    longFast, longSlow, src
+)
 
 // ------------------------------------------------------------------
-// EMA Cloud - Draw the Bearish/Bullish Crossover Indicators
+// EMA Cloud - Get the Color Settings & Draw over the Instrument
 // ------------------------------------------------------------------
 
-upCross = ta.crossover(emaFast, emaSlow)
-dnCross = ta.crossunder(emaFast, emaSlow)
+shFillColor = sMktSentiment == 1 ? bullColor : sMktSentiment == -1 ? bearColor : neutralColor
+lnFillColor = lMktSentiment == 1 ? bullColor : lMktSentiment == -1 ? bearColor : neutralColor
+
+// ? 2026-04-26:: Short Cloud Drawing(s); Optional Show EMA Cross
+spFast = plot(sEMAFast, "Fast EMA (short)", color = color.new(color.black, 20), display = display.none)
+spSlow = plot(sEMASlow, "Slow EMA (short)", color = color.new(color.black, 20), display = display.none)
+fill(spFast, spSlow, color = shFillColor, title = "EMA Short Cloud")
+
 
 plotshape(
-    upCross, style = shape.triangleup, location = location.belowbar
-    , color = color.black, size = size.tiny, title = "BULL Crossover"
+    sUpCross and markShortCross, style = shape.triangleup, location = location.belowbar
+    , color = color.black, size = size.tiny, title = "Short BULL Crossover", text = "S"
 )
 
 plotshape(
-    dnCross, style = shape.triangledown, location = location.abovebar
-    , color = color.black, size = size.tiny, title = "BEAR Crossover"
+    sDnCross and markShortCross, style = shape.triangledown, location = location.abovebar
+    , color = color.black, size = size.tiny, title = "Short BEAR Crossover", text = "S"
+)
+
+// ? 2026-04-26:: Long Clowd Drawings; Optional Show EMA Cross
+lpFast = plot(lEMAFast, "Fast EMA (long)", color = color.new(color.black, 20), display = display.none)
+lpSlow = plot(lEMASlow, "Slow EMA (long)", color = color.new(color.black, 20), display = display.none)
+fill(lpFast, lpSlow, color = lnFillColor, title = "EMA Long Cloud")
+
+plotshape(
+    lUpCross and markLongCross, style = shape.triangleup, location = location.belowbar
+    , color = color.black, size = size.tiny, title = "Long BULL Crossover", text = "L"
+)
+
+plotshape(
+    lDnCross and markLongCross, style = shape.triangledown, location = location.abovebar
+    , color = color.black, size = size.tiny, title = "Long BEAR Crossover", text = "L"
 )

@@ -1,0 +1,142 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Copywright © 2026 ZenithClown (Debmalya Pramanik) | https://zenithclown.github.io/ | https://www.linkedin.com/in/dpramanik/
+
+//@version=6
+
+// ==================================================================
+// OBJECTTIVE: A Combination of EMA to Draw Cloud Pattern on Chart
+//
+// The "2-EMA Line System" is one of the most oldest and durable
+// frameworks in technical analysis where we plot one "fast" (short)
+// and one "slow" (long) exponential moving average line on the same
+// chart and their relationships determine the state of the security.
+//
+// Cloud Theory: Generate a Colored Shaded Cloud based on EMA Pairs
+//
+// The cloud theory is inspired from "SD Cloud Master Indicator" in
+// TradingView. This provides configurable length and EMA Lenghts to
+// create a long-/short-term trading strategy based on the coverage.
+//
+// Example/Usage(s) of EMA Pairs
+//
+// EMA Pairs serves different purposes. Here are an example of typical
+// pairs that are used in institutions, market research and other
+// published strategies:
+//
+// Scalping/Intraday Momentum [5, 13] - Linda Raschke's Classic Fast
+// Pair; Very Reactive. Recommended Timeframe: 5-15 mins. Chart
+//
+// Short-Term Swing/Intraday Trend [7, 21] - Popular on Crypto and NSE
+// (Indian Securities); Catches Multi-Day Momentum.
+//
+// Short-Term Swing [9, 21] - Slight Variation, Popular on FOREX and
+// Futures Desks.
+//
+// Institutional Gold Standard [50, 200] - The most watched global
+// standard. The crossover strategy are (I) "Golden Crossover" when
+// the 50 EMA crosses above 200 EMA and (II) "Death Crossover" occurs
+// when the 50 EMA falls below the 200 EMA line.
+//
+// Check https://github.com/growthio/tradingview for details.
+// Check https://in.tradingview.com/u/ZenithClown/ for TV Profile.
+// ==================================================================
+
+library('cloudTheory', overlay = true)
+
+// ------------------------------------------------------------------
+// Function Implementation: Draw Shaded Cloud based on EMA Pairs
+//
+// The function captures the two EMA length and based on which it
+// determines if the underlying security is in a bullish or bearish
+// or neutral phase. The flag and the EMA values can then be used to
+// calculate and draw shaded cloud using a TradingView Indicator.
+//
+// @param fastLength - Fast EMA Length, the shorter length which
+//  typically determines the current rhythm of the security.
+//
+// @param slowLength - Slow EMA Length, the longer length which
+//   determines the underlying drift of the security.
+//
+// @param src - Which value of the candle should be used to calculate
+//  the moving average; defaults to candle close value.
+//
+// @returns [emaFast, emaSlow, mktSentiment, *Cross] - EMA Values and
+// a flag to determine the market sentiment. The sentiment flag can be
+// read as: (I) '1' the security is bullish, (II) '-1' the security is
+// bearish and (III) '0' denotes the security is neutral. The last two
+// values returned are the "EMA Cross" points. These values can be
+// directly used to determine the trend and set and altert.
+// ------------------------------------------------------------------
+
+export drawCloud(
+    simple int fastLength
+    , simple int slowLength
+    , series float src = close
+) =>
+    emaFast = ta.ema(src, fastLength)
+    emaSlow = ta.ema(src, slowLength)
+
+    // determine the candle in which zone: bullish/bearish/neutral
+    // also, based on the same create the color line condition check
+    mktSentiment = (
+        src > emaFast and src > emaSlow ? 1 :
+        src < emaFast and src < emaSlow ? -1 : 0
+    )
+
+    // add the cross over points and return points
+    upCross = ta.crossover(emaFast, emaSlow)
+    dnCross = ta.crossunder(emaFast, emaSlow)
+
+    [emaFast, emaSlow, mktSentiment, upCross, dnCross]
+
+// ------------------------------------------------------------------
+// Function Implementation: Momentum Strategy using 2 EMA Cloud
+//
+// The function uses two "EMA Cloud [drawCloud()]" to determine the
+// momentum of the stock. The function tries to calculate short-,
+// medium- and long-term momentum of the underlying security. In
+// addition, the function calculates if the condition is improving or
+// deteoriating. The condition is a simple rule - checks if the cloud
+// gap (between the fast and slow EMA) is increasing or decreasing.
+//
+// @param shortFast - Short Cloud's Fast EMA Length
+// @param shortSlow - Short Cloud's Slow EMA Length
+// @param longFast - Long Cloud's Fast EMA Length
+// @param longSlow - Long Cloud's Slow EMA Length
+//
+// @param src - Which value of the candle should be used to calculate
+//  the moving average; defaults to candle close value.
+//
+// @param momentumLength - A fixed historic candle lookback length
+//  that determines the short-, medium- and long-term momentum of the
+//  underlying security based on the short and the long cloud.
+// ------------------------------------------------------------------
+
+export momentumCloud(
+    simple int shortFast
+    , simple int shortSlow
+    , simple int longFast
+    , simple int longSlow
+    , series float src = close
+    , simple int momentumLength = 21
+) =>
+    [sEMAF, sEMAS, shortSentiment, _, _] = drawCloud(
+        shortFast, shortSlow, src
+    )
+
+    [lEMAF, lEMAS, longSentiment, _, _] = drawCloud(
+        longFast, longSlow, src
+    )
+
+    // ? calculate the gap b/w the short and long cloud
+    sCloudGap = sEMAF - sEMAS
+    lCloudGap = lEMAF - lEMAS
+
+    sCloudNGap = sCloudGap[momentumLength]
+    lCloudNGap = lCloudGap[momentumLength]
+
+    // ! determine if the short/long is improving
+    isShtImp = math.abs(sCloudGap) > math.abs(sCloudNGap)
+    isLgnImp = math.abs(lCloudGap) > math.abs(lCloudNGap)
+
+    [sEMAF, sEMAS, shortSentiment, lEMAF, lEMAS, longSentiment]

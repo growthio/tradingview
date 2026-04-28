@@ -38,6 +38,7 @@
 // ==================================================================
 
 indicator("EMA Cloud", overlay = true)
+import ZenithClown/cloudTheory/4 as cloudTheory
 
 // ------------------------------------------------------------------
 // INPUT(s) for EMA Cloud Pair(s) to Determine Underlying Movement
@@ -85,19 +86,34 @@ longSlow = input.int(
 // INPUT(s) for Settings for the Cloud Color based on the Sentiment
 // ------------------------------------------------------------------
 
-bullColor = input.color(
-    color.new(color.green, 70), "BULL"
-    , group = "Color Settings", inline = "CL"
+sBullColor = input.color(
+    color.new(color.green, 85), "BULL (short)"
+    , group = "Color Settings", inline = "CLS"
 )
 
-bearColor = input.color(
-    color.new(color.red, 70), "BEAR"
-    , group = "Color Settings", inline = "CL"
+sBearColor = input.color(
+    color.new(color.red, 85), "BEAR (short)"
+    , group = "Color Settings", inline = "CLS"
 )
 
-neutralColor = input.color(
-    color.new(color.yellow, 70), "NEUTRAL"
-    , group = "Color Settings", inline = "CL"
+sNeutralColor = input.color(
+    color.new(color.yellow, 85), "NEUTRAL (short)"
+    , group = "Color Settings", inline = "CLS"
+)
+
+lBullColor = input.color(
+    color.new(color.green, 70), "BULL (long)"
+    , group = "Color Settings", inline = "CLL"
+)
+
+lBearColor = input.color(
+    color.new(color.red, 70), "BEAR (long)"
+    , group = "Color Settings", inline = "CLL"
+)
+
+lNeutralColor = input.color(
+    color.new(color.yellow, 70), "NEUTRAL (long)"
+    , group = "Color Settings", inline = "CLL"
 )
 
 // ------------------------------------------------------------------
@@ -126,10 +142,8 @@ markLongCross = input.bool(
 )
 
 // ------------------------------------------------------------------
-// Import Trading View Library & Get Values
+// Import Trading View Library & Get Values:: drawCloud()
 // ------------------------------------------------------------------
-
-import ZenithClown/cloudTheory/2 as cloudTheory
 
 [sEMAFast, sEMASlow, sMktSentiment, sUpCross, sDnCross] = cloudTheory.drawCloud(
     shortFast, shortSlow, src
@@ -143,8 +157,8 @@ import ZenithClown/cloudTheory/2 as cloudTheory
 // EMA Cloud - Get the Color Settings & Draw over the Instrument
 // ------------------------------------------------------------------
 
-shFillColor = sMktSentiment == 1 ? bullColor : sMktSentiment == -1 ? bearColor : neutralColor
-lnFillColor = lMktSentiment == 1 ? bullColor : lMktSentiment == -1 ? bearColor : neutralColor
+shFillColor = sMktSentiment == 1 ? sBullColor : sMktSentiment == -1 ? sBearColor : sNeutralColor
+lnFillColor = lMktSentiment == 1 ? lBullColor : lMktSentiment == -1 ? lBearColor : lNeutralColor
 
 // ? 2026-04-26:: Short Cloud Drawing(s); Optional Show EMA Cross
 spFast = plot(sEMAFast, "Fast EMA (short)", color = color.new(color.black, 20), display = display.none)
@@ -176,3 +190,43 @@ plotshape(
     lDnCross and markLongCross, style = shape.triangledown, location = location.abovebar
     , color = color.black, size = size.tiny, title = "Long BEAR Crossover", text = "L"
 )
+
+// ------------------------------------------------------------------
+// Import Trading View Library & Get Values:: priceAction() [WIP]
+// ------------------------------------------------------------------
+[_, _, _, _, _, _, shortPriceActionScore] = cloudTheory.priceAction(
+    shortFast, shortSlow, src, 14
+)
+
+[_, _, _, _, _, _, longPriceActionScore] = cloudTheory.priceAction(
+    longFast, longSlow, src, 14
+)
+
+var label ssLabel = na
+var label lsLabel = na
+
+shLabelColor = (
+    shortPriceActionScore < -0.25 ? sBearColor :
+    shortPriceActionScore < 0.25 ? sNeutralColor : sBullColor
+)
+
+lnLabelColor = (
+    longPriceActionScore < -0.25 ? lBearColor : 
+    longPriceActionScore < 0.25 ? lNeutralColor : lBullColor
+)
+
+if barstate.islast
+    label.delete(ssLabel)
+    ssLabel := label.new(
+        bar_index, sEMAFast, "PA1: " + str.tostring(shortPriceActionScore, "#.##")
+        , style = label.style_label_left, color = shLabelColor
+        , textcolor = color.black, size = size.small
+    )
+
+if barstate.islast
+    label.delete(lsLabel)
+    lsLabel := label.new(
+        bar_index, lEMAFast, "PA2: " + str.tostring(longPriceActionScore, "#.##")
+        , style = label.style_label_left, color = lnLabelColor
+        , textcolor = color.black, size = size.small
+    )

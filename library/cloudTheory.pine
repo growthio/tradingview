@@ -90,53 +90,108 @@ export drawCloud(
     [emaFast, emaSlow, mktSentiment, upCross, dnCross]
 
 // ------------------------------------------------------------------
-// Function Implementation: Momentum Strategy using 2 EMA Cloud
+// Function Implementation: Calculation of Price Action on EMA Pairs
 //
-// The function uses two "EMA Cloud [drawCloud()]" to determine the
-// momentum of the stock. The function tries to calculate short-,
-// medium- and long-term momentum of the underlying security. In
-// addition, the function calculates if the condition is improving or
-// deteoriating. The condition is a simple rule - checks if the cloud
-// gap (between the fast and slow EMA) is increasing or decreasing.
+// The Five Dimensional Framework of Price Action on EMA Pairs is an
+// industry standard that calculates and assigns one single weighted
+// value based on the below properties to determine the condition.
+// This strategy is used mainly by the Trend Following Commodity
+// Trading Advisor (CTA) and Systemic Equity Desks advisor computes
+// for hundreds of different EMA pair aggregates. The function tries
+// to simplify the same using two EMA pairs which can be extended to
+// multiple pairs on the go (as required).
 //
-// @param shortFast - Short Cloud's Fast EMA Length
-// @param shortSlow - Short Cloud's Slow EMA Length
-// @param longFast - Long Cloud's Fast EMA Length
-// @param longSlow - Long Cloud's Slow EMA Length
+// 1. Regime/Trend State (Position of EMAs)
+// Calculate and determine if the fundamental signal (slow) is above
+// the current trend. Mathematically, this can be calculated as::
 //
-// @param src - Which value of the candle should be used to calculate
-//  the moving average; defaults to candle close value.
+// emaFast > emaSlow → Uptrend Regime (bullish drift)
+// emaFast < emaSlow → Downtrend Regime (bearish drift)
 //
-// @param momentumLength - A fixed historic candle lookback length
-//  that determines the short-, medium- and long-term momentum of the
-//  underlying security based on the short and the long cloud.
+// 2. Price Locations (Zones Relative to the Cloud)
+// 3. Slope/Momentum (Rate of Change of EMA)
+// 4. Spread / Separation (Distance b/w EMAs)
+// 5. Distance from Mean
 // ------------------------------------------------------------------
 
-export momentumCloud(
-    simple int shortFast
-    , simple int shortSlow
-    , simple int longFast
-    , simple int longSlow
+// ! TanH() is not present in Pine Script v6; Use squash() Method
+// Ensures that the score to be bounded [-1, 1] always; which
+// determines the strength of the Price Action Value based on ATR %
+squash(x) => 2.0 / (1.0 + math.exp(-2.0 * x)) - 1.0
+
+export priceAction(
+    simple int fastLength
+    , simple int slowLength
     , series float src = close
-    , simple int momentumLength = 21
+    , simple int atrLength = 14
 ) =>
-    [sEMAF, sEMAS, shortSentiment, _, _] = drawCloud(
-        shortFast, shortSlow, src
+
+    [emaFast, emaSlow, _, _, _] = drawCloud(
+        fastLength, slowLength, src
     )
 
-    [lEMAF, lEMAS, longSentiment, _, _] = drawCloud(
-        longFast, longSlow, src
+    atrValue = ta.atr(atrLength)
+
+    // Values to Clamp for Floating Point Errors
+    epsilon = 1e-10
+    safeSlow = nz(emaSlow) == 0 ? epsilon : emaSlow
+    safeFastPrev = nz(emaFast[1]) == 0 ? epsilon : emaFast[1]
+    safeSlowPrev = nz(emaSlow[1]) == 0 ? epsilon : emaSlow[1]
+    safeATRValue = nz(atrValue) == 0 ? epsilon : atrValue
+
+    // ? (1) Calculate the Current Regime
+    regime = emaFast > emaSlow ? 1 : emaFast < emaSlow ? -1 : 0
+
+    // ? (2) Calculate the Zone Relative to the Cloud
+    zone = (
+        src > emaFast and emaFast > emaSlow ?  2 :
+        src < emaFast and emaFast > emaSlow ?  1 :
+        src > emaFast and emaFast < emaSlow ? -1 :
+        src < emaFast and emaFast < emaSlow ? -2 : 0
     )
 
-    // ? calculate the gap b/w the short and long cloud
-    sCloudGap = sEMAF - sEMAS
-    lCloudGap = lEMAF - lEMAS
+    // ? (3) Calculate the Rate of Change of EMA
+    fastSlope = (emaFast - emaFast[1]) / emaFast[1] * 100
+    slowSlope = (emaSlow - emaSlow[1]) / emaSlow[1] * 100
 
-    sCloudNGap = sCloudGap[momentumLength]
-    lCloudNGap = lCloudGap[momentumLength]
+    // Normalize ATR Value with Percent Change
+    atrNormPct = safeATRValue / nz(src, epsilon) * 100
+    safeATRNormPct = atrNormPct == 0 ? epsilon : atrNormPct
 
-    // ! determine if the short/long is improving
-    isShtImp = math.abs(sCloudGap) > math.abs(sCloudNGap)
-    isLgnImp = math.abs(lCloudGap) > math.abs(lCloudNGap)
+    // ? (4) Calculate the Spread of the EMAs
+    spread = (emaFast - emaSlow) / emaSlow * 100
+    spreadNorm = spread / safeATRNormPct
 
-    [sEMAF, sEMAS, shortSentiment, lEMAF, lEMAS, longSentiment]
+    // ? (5) Distance from the Mean/Fast EMA
+    distance = (src - emaFast) / atrValue
+
+    // Normalize the Fast/Slow Slope with ATR Value
+    fastSlopeNorm = fastSlope / safeATRNormPct
+    slowSlopeNorm = slowSlope / safeATRNormPct
+
+    // ! Calcualte a Weighted Score of all the Points and Return
+    sRegime = regime
+    sZone = zone / 2.0
+    sFastSlope = squash(fastSlopeNorm)
+    sSlowSlope = squash(slowSlopeNorm)
+    sSpread = squash(spreadNorm)
+    sDistance = squash(distance / 2.0)
+
+    wRegime = 0.20
+    wZone = 0.20
+    wFastSlope = 0.20
+    wSlowSlope = 0.10
+    wSpread = 0.15
+    wDistance = 0.15
+
+    score = (
+        sRegime * wRegime +
+        sZone * wZone +
+        sFastSlope * wFastSlope +
+        sSlowSlope * wSlowSlope +
+        sSpread * wSpread +
+        sDistance * wDistance
+    )
+
+    score := math.max(-1.0, math.min(1.0, score))
+    [regime, zone, fastSlope, slowSlope, spread, distance, score]

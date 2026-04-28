@@ -1,0 +1,230 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Copywright © 2026 ZenithClown (Debmalya Pramanik) | https://zenithclown.github.io/ | https://www.linkedin.com/in/dpramanik/
+
+//@version=6
+
+// ==================================================================
+// OBJECTTIVE: Universal Range Breakout Strategy for a Security
+//
+// A range breakout strategy involves identifying a price range and
+// trading in the direction of a breakout once the price moves beyond
+// the established support or resistance levels. This scripts tries to
+// perform a back testing on the underlying security.
+//
+// Default Setting(s)
+//
+// Currency Unit   : INR
+// Initial Capital : ₹ 1,00,000.00
+//
+// Default Entry/Exit Condition(s)
+//
+// Monitor the `HIGH` and `LOW` for a defined time period, and then
+// enter `LONG` if there is a breakout (close) above the range high or
+// enter `SHORT` if there is a breakout (close) below the range.
+//
+// Check https://github.com/growthio/tradingview for details.
+// Check https://in.tradingview.com/u/ZenithClown/ for TV Profile.
+// ==================================================================
+
+strategy(
+    'Range Breakout Strategy', shorttitle = 'RB'
+    , overlay = true, currency = currency.INR
+    // settings for initial capital, in above default currency
+    , initial_capital = 100000
+    // pyramiding defines the number of entry in each direction
+    , pyramiding = 2
+    // number of units during the entry condition, in percentage
+    // defaults to 10% of capital during either long/short position
+    , default_qty_type = strategy.percent_of_equity
+    , default_qty_value = 10
+    // calculate only when the current candle is closed
+    , calc_on_every_tick = false
+    // calculate entry/exit on the current candle close
+    , process_orders_on_close = true
+    // settings for trade-bot slippage; thumb rule is 5%
+    , slippage = 5
+)
+
+import ZenithClown/rangeBreakout/1 as rangeBreakout
+
+// ------------------------------------------------------------------
+// INPUT(s) for Range Selection | Group Name: Range Window
+// ------------------------------------------------------------------
+
+trackTimePeriod = input.session(
+    "0930-1030", "Session Time Range", group = "Range Window"
+    , tooltip = "Time Range (HH:MM) to Track Security"
+)
+
+drawTimePeriod = input.session(
+    "1030-1530", "Draw H/L Line for Range", group = "Range Window"
+    , tooltip = "Time Range (HH:MM) to Draw High/Low Line"
+)
+
+tradeTimePeriod = input.session(
+    "1030-1400", "Trading Time Period", group = "Range Window"
+)
+
+maxLookbackDays = input.int(
+    21, "Max Lookback Days", minval = 1, group = "Range Window"
+    , tooltip = "Number of Historic Days to Compute"
+)
+
+// ------------------------------------------------------------------
+// INPUT(s) for Color Selection | Group Name: Color & Window Config
+// ------------------------------------------------------------------
+
+showTrackingWindow = input.bool(
+    false, "Highlight Tracking Window", group = "Color & Window Config"
+)
+
+highLineColor = input.color(
+    color.new(#26A691, 0), "High Line Color"
+    , group = "Color & Window Config", inline = "HLLINE"
+)
+
+lowLineColor = input.color(
+    color.new(#EF5350, 0), "Low Line Color"
+    , group = "Color & Window Config", inline = "HLLINE"
+)
+
+middleLineColor = input.color(
+    color.black, "Middle Line Color"
+    , group = "Color & Window Config", inline = "HLLINE"
+)
+
+rangeBgColor = input.color(
+    color.new(color.yellow, 85), "Range Background Color"
+    , group = "Color & Window Config"
+)
+
+// ------------------------------------------------------------------
+// INPUT(s) for Trade Settings (SL/Profit) | Group Name: Trade Config
+// ------------------------------------------------------------------
+
+takeProfitPct = input.float(
+    10.0, "Take Profit (%)", minval = 0.1, step = 0.1
+    , group = "Trade Config", inline = "TSPCT"
+)
+
+stopLossPct = input.float(
+    5.0, "Stop Loss (%)", minval = 0.1, step = 0.1
+    , group = "Trade Config", inline = "TSPCT"
+)
+
+allowLongs = input.bool(
+    true, "Take Long Position"
+    , group = "Trade Config", inline = "AL"
+)
+
+allowShorts = input.bool(
+    true, "Take Short Position"
+    , group = "Trade Config", inline = "AL"
+)
+
+onlyOneTrade = input.bool(
+    true, "Only One Trade/Day", group = "Trade Config"
+)
+
+// ------------------------------------------------------------------
+// Call `rangeBreakout()` and Draw on Chart with Overlay Setting
+// ------------------------------------------------------------------
+
+[rangeHi, rangeLo, inTrackRange] = rangeBreakout.markRange(
+    trackTimePeriod, drawTimePeriod, highLineColor, lowLineColor, middleLineColor, maxLookbackDays
+)
+
+// ------------------------------------------------------------------
+// Time Zone Settings | Use the timezone that is currently active,
+// based on this, mark the range and then calculate the strategy.
+// ------------------------------------------------------------------
+
+tz = syminfo.timezone
+
+parseTradeTime(string value, int start) =>
+    int startH = int(math.round(str.tonumber(str.substring(
+        value, start, start + 2
+    ))))
+    int startM = int(math.round(str.tonumber(str.substring(
+        value, start + 2, start + 4
+    ))))
+
+    startH * 60 + startM
+
+tradeStartTime = parseTradeTime(tradeTimePeriod, 0)
+tradeFinalTime = parseTradeTime(tradeTimePeriod, 5)
+
+currentTradeTime = hour(time, tz) * 60 + minute(time, tz)
+
+// Calculate if within traing time window, else return false; reset everyday
+inTradeWindow = (
+    currentTradeTime >= tradeStartTime and currentTradeTime <= tradeFinalTime
+)
+
+newTradeDay = ta.change(time("D")) != 0
+
+var bool tradedToday = false
+
+if newTradeDay
+    tradedToday := false
+
+// ------------------------------------------------------------------
+// Strategy: Range Breakout Entry Condition(s)
+// ------------------------------------------------------------------
+
+longBreakout = (
+    allowLongs and inTradeWindow and not na(rangeHi)
+    and close > rangeHi and close[1] <= rangeHi
+    and (not onlyOneTrade or not tradedToday)
+)
+
+shortBreakout = (
+    allowShorts and inTradeWindow and not na(rangeLo)
+    and close < rangeLo and close[1] >= rangeLo
+    and (not onlyOneTrade or not tradedToday)
+)
+
+// ------------------------------------------------------------------
+// Strategy: Range Breakout Exit & Exit Management Condition(s)
+// ------------------------------------------------------------------
+
+if longBreakout
+    strategy.entry("Long", strategy.long)
+    tradedToday := true
+
+if shortBreakout
+    strategy.entry("Short", strategy.short)
+    tradedToday := true
+
+longTP = strategy.position_avg_price * (1 + takeProfitPct / 100)
+longSL = strategy.position_avg_price * (1 - stopLossPct / 100)
+shortTP = strategy.position_avg_price * (1 - takeProfitPct / 100)
+shortSL = strategy.position_avg_price * (1 + stopLossPct / 100)
+
+if strategy.position_size > 0
+    strategy.exit("Long Exit", from_entry = "Long", limit = longTP, stop = longSL)
+
+if strategy.position_size < 0
+    strategy.exit("Short Exit", from_entry = "Short", limit = shortTP, stop = shortSL)
+
+eodExit = inTradeWindow and currentTradeTime >= tradeFinalTime - 1
+
+if eodExit and strategy.position_size != 0
+    strategy.close_all(comment = "EOD")
+
+// ------------------------------------------------------------------
+// Entry & Exit Visualization via Triangle Marker(s)
+// ------------------------------------------------------------------
+
+isEntry = longBreakout or shortBreakout
+isExit = (strategy.position_size == 0 and strategy.position_size[1] != 0)
+
+plotshape(
+    isEntry, title = "Entry", style = shape.triangleup
+    , location = location.belowbar, color = color.green, size = size.small
+)
+
+plotshape(
+    isExit, title = "Exit", style = shape.triangledown
+    , location = location.abovebar, color = color.red, size = size.small
+)

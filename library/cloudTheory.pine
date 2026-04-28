@@ -1,0 +1,197 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Copywright © 2026 ZenithClown (Debmalya Pramanik) | https://zenithclown.github.io/ | https://www.linkedin.com/in/dpramanik/
+
+//@version=6
+
+// ==================================================================
+// OBJECTTIVE: A Combination of EMA to Draw Cloud Pattern on Chart
+//
+// The "2-EMA Line System" is one of the most oldest and durable
+// frameworks in technical analysis where we plot one "fast" (short)
+// and one "slow" (long) exponential moving average line on the same
+// chart and their relationships determine the state of the security.
+//
+// Cloud Theory: Generate a Colored Shaded Cloud based on EMA Pairs
+//
+// The cloud theory is inspired from "SD Cloud Master Indicator" in
+// TradingView. This provides configurable length and EMA Lenghts to
+// create a long-/short-term trading strategy based on the coverage.
+//
+// Example/Usage(s) of EMA Pairs
+//
+// EMA Pairs serves different purposes. Here are an example of typical
+// pairs that are used in institutions, market research and other
+// published strategies:
+//
+// Scalping/Intraday Momentum [5, 13] - Linda Raschke's Classic Fast
+// Pair; Very Reactive. Recommended Timeframe: 5-15 mins. Chart
+//
+// Short-Term Swing/Intraday Trend [7, 21] - Popular on Crypto and NSE
+// (Indian Securities); Catches Multi-Day Momentum.
+//
+// Short-Term Swing [9, 21] - Slight Variation, Popular on FOREX and
+// Futures Desks.
+//
+// Institutional Gold Standard [50, 200] - The most watched global
+// standard. The crossover strategy are (I) "Golden Crossover" when
+// the 50 EMA crosses above 200 EMA and (II) "Death Crossover" occurs
+// when the 50 EMA falls below the 200 EMA line.
+//
+// Check https://github.com/growthio/tradingview for details.
+// Check https://in.tradingview.com/u/ZenithClown/ for TV Profile.
+// ==================================================================
+
+library('cloudTheory', overlay = true)
+
+// ------------------------------------------------------------------
+// Function Implementation: Draw Shaded Cloud based on EMA Pairs
+//
+// The function captures the two EMA length and based on which it
+// determines if the underlying security is in a bullish or bearish
+// or neutral phase. The flag and the EMA values can then be used to
+// calculate and draw shaded cloud using a TradingView Indicator.
+//
+// @param fastLength - Fast EMA Length, the shorter length which
+//  typically determines the current rhythm of the security.
+//
+// @param slowLength - Slow EMA Length, the longer length which
+//   determines the underlying drift of the security.
+//
+// @param src - Which value of the candle should be used to calculate
+//  the moving average; defaults to candle close value.
+//
+// @returns [emaFast, emaSlow, mktSentiment, *Cross] - EMA Values and
+// a flag to determine the market sentiment. The sentiment flag can be
+// read as: (I) '1' the security is bullish, (II) '-1' the security is
+// bearish and (III) '0' denotes the security is neutral. The last two
+// values returned are the "EMA Cross" points. These values can be
+// directly used to determine the trend and set and altert.
+// ------------------------------------------------------------------
+
+export drawCloud(
+    simple int fastLength
+    , simple int slowLength
+    , series float src = close
+) =>
+    emaFast = ta.ema(src, fastLength)
+    emaSlow = ta.ema(src, slowLength)
+
+    // determine the candle in which zone: bullish/bearish/neutral
+    // also, based on the same create the color line condition check
+    mktSentiment = (
+        src > emaFast and src > emaSlow ? 1 :
+        src < emaFast and src < emaSlow ? -1 : 0
+    )
+
+    // add the cross over points and return points
+    upCross = ta.crossover(emaFast, emaSlow)
+    dnCross = ta.crossunder(emaFast, emaSlow)
+
+    [emaFast, emaSlow, mktSentiment, upCross, dnCross]
+
+// ------------------------------------------------------------------
+// Function Implementation: Calculation of Price Action on EMA Pairs
+//
+// The Five Dimensional Framework of Price Action on EMA Pairs is an
+// industry standard that calculates and assigns one single weighted
+// value based on the below properties to determine the condition.
+// This strategy is used mainly by the Trend Following Commodity
+// Trading Advisor (CTA) and Systemic Equity Desks advisor computes
+// for hundreds of different EMA pair aggregates. The function tries
+// to simplify the same using two EMA pairs which can be extended to
+// multiple pairs on the go (as required).
+//
+// 1. Regime/Trend State (Position of EMAs)
+// Calculate and determine if the fundamental signal (slow) is above
+// the current trend. Mathematically, this can be calculated as::
+//
+// emaFast > emaSlow → Uptrend Regime (bullish drift)
+// emaFast < emaSlow → Downtrend Regime (bearish drift)
+//
+// 2. Price Locations (Zones Relative to the Cloud)
+// 3. Slope/Momentum (Rate of Change of EMA)
+// 4. Spread / Separation (Distance b/w EMAs)
+// 5. Distance from Mean
+// ------------------------------------------------------------------
+
+// ! TanH() is not present in Pine Script v6; Use squash() Method
+// Ensures that the score to be bounded [-1, 1] always; which
+// determines the strength of the Price Action Value based on ATR %
+squash(x) => 2.0 / (1.0 + math.exp(-2.0 * x)) - 1.0
+
+export priceAction(
+    simple int fastLength
+    , simple int slowLength
+    , series float src = close
+    , simple int atrLength = 14
+) =>
+
+    [emaFast, emaSlow, _, _, _] = drawCloud(
+        fastLength, slowLength, src
+    )
+
+    atrValue = ta.atr(atrLength)
+
+    // Values to Clamp for Floating Point Errors
+    epsilon = 1e-10
+    safeSlow = nz(emaSlow) == 0 ? epsilon : emaSlow
+    safeFastPrev = nz(emaFast[1]) == 0 ? epsilon : emaFast[1]
+    safeSlowPrev = nz(emaSlow[1]) == 0 ? epsilon : emaSlow[1]
+    safeATRValue = nz(atrValue) == 0 ? epsilon : atrValue
+
+    // ? (1) Calculate the Current Regime
+    regime = emaFast > emaSlow ? 1 : emaFast < emaSlow ? -1 : 0
+
+    // ? (2) Calculate the Zone Relative to the Cloud
+    zone = (
+        src > emaFast and emaFast > emaSlow ?  2 :
+        src < emaFast and emaFast > emaSlow ?  1 :
+        src > emaFast and emaFast < emaSlow ? -1 :
+        src < emaFast and emaFast < emaSlow ? -2 : 0
+    )
+
+    // ? (3) Calculate the Rate of Change of EMA
+    fastSlope = (emaFast - emaFast[1]) / emaFast[1] * 100
+    slowSlope = (emaSlow - emaSlow[1]) / emaSlow[1] * 100
+
+    // Normalize ATR Value with Percent Change
+    atrNormPct = safeATRValue / nz(src, epsilon) * 100
+    safeATRNormPct = atrNormPct == 0 ? epsilon : atrNormPct
+
+    // ? (4) Calculate the Spread of the EMAs
+    spread = (emaFast - emaSlow) / emaSlow * 100
+    spreadNorm = spread / safeATRNormPct
+
+    // ? (5) Distance from the Mean/Fast EMA
+    distance = (src - emaFast) / atrValue
+
+    // Normalize the Fast/Slow Slope with ATR Value
+    fastSlopeNorm = fastSlope / safeATRNormPct
+    slowSlopeNorm = slowSlope / safeATRNormPct
+
+    // ! Calcualte a Weighted Score of all the Points and Return
+    sRegime = regime
+    sZone = zone / 2.0
+    sFastSlope = squash(fastSlopeNorm)
+    sSlowSlope = squash(slowSlopeNorm)
+    sSpread = squash(spreadNorm)
+    sDistance = squash(distance / 2.0)
+
+    wRegime = 0.20
+    wZone = 0.20
+    wFastSlope = 0.20
+    wSlowSlope = 0.10
+    wSpread = 0.15
+    wDistance = 0.15
+
+    score = (
+        sRegime * wRegime +
+        sZone * wZone +
+        sFastSlope * wFastSlope +
+        sSlowSlope * wSlowSlope +
+        sSpread * wSpread +
+        sDistance * wDistance
+    )
+
+    score := math.max(-1.0, math.min(1.0, score))
+    [regime, zone, fastSlope, slowSlope, spread, distance, score]

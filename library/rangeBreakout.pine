@@ -30,6 +30,16 @@ parseSessionTime(string value, int start) =>
 
     startH * 60 + startM
 
+parseSessionRange(string value) =>
+    rangeStart = parseSessionTime(value, 0)
+    rangeFinal = parseSessionTime(value, 5)
+
+    // ? Check Session Range and Return if Pass
+    if rangeFinal <= rangeStart
+        runtime.error("Session End Time must be After Start Time.")
+
+    [rangeStart, rangeFinal]
+
 // ------------------------------------------------------------------
 // Function Implementation: Marks High/Low of a Tracking Window
 //
@@ -62,16 +72,8 @@ export markRange(
 ) =>
     tz = syminfo.timezone
 
-    rangeStartTime = parseSessionTime(trackTimePeriod, 0)
-    rangeFinalTime = parseSessionTime(trackTimePeriod, 5)
-    displayStartTime = parseSessionTime(drawTimePeriod, 0)
-    displayFinalTime = parseSessionTime(drawTimePeriod, 5)
-
-    // Check time settings, if not valid return runtime error
-    if rangeFinalTime <= rangeStartTime
-        runtime.error("Tracking Session end must be after start.")
-    if displayFinalTime <= displayStartTime
-        runtime.error("Drawing Session end must be after start.")
+    [rangeStartTime, rangeFinalTime] = parseSessionRange(trackTimePeriod)
+    [displayStartTime, displayFinalTime] = parseSessionRange(drawTimePeriod)
 
     // Check if the Current Time in Range/Draw Phase/None
     currentTime = hour(time, tz) * 60 + minute(time, tz)
@@ -153,3 +155,52 @@ export markRange(
             line.set_x2(curMid, bar_index)
 
     [rangeHi, rangeLo, inTrackRange]
+
+// ------------------------------------------------------------------
+// Function Implementation: Volume Confirmation on Range Breakout
+//
+// @param trackTimePeriod - Time range for which the high and low
+//  values are tracked. This is the range, any breakout above/below
+//  this period can indicate a potential long/short entry condition.
+//
+// @param drawTimePeriod - Time range for which the range is valid,
+//  this is typically from the end of the `trackTimePeriod` to the
+//  end of the day (or session) for the security.
+//
+// @param {*}LineColor - The line color for `high`, `low` and the
+//  `mid` line that will be used to plot the values.
+//
+// @param maxLookbackDays - Number of historic days to retain the
+//  range value.
+//
+// @returns [rangeHi, rangeLo, inTrackRange] - Values to print the
+//  range values, and boolean indicator that indicates if the current
+//  time is within the tracking time period.
+// ------------------------------------------------------------------
+
+export volumeConfirmation(
+    simple string trackTimePeriod
+    , simple string drawTimePeriod
+    , simple int maxLookbackDays = 1
+    , simple int volumeLength = 15
+    , simple float volumeMultiplier = 1.5
+) =>
+    [rangeHi, rangeLo, inTrackRange] = markRange(
+        trackTimePeriod, drawTimePeriod, na, na, na, maxLookbackDays
+    )
+
+    // ? Calculate if in the Drawing Range and then Check Volume
+    rangeReady = not(inTrackRange) and not na(rangeHi) and not na(rangeLo)
+
+    // ! Calculate the Volume Profile based on Multipler & MA
+    volumeConfirm = volume >= ta.sma(volume, volumeLength) * volumeMultiplier
+
+    // ? Get if there is a Volume Confirmation with the Range Breakout
+    longBreakout = (
+        rangeReady and barstate.isconfirmed and close > rangeHi and volumeConfirm
+    )
+    shortBreakout = (
+        rangeReady and barstate.isconfirmed and close < rangeLo and volumeConfirm
+    )
+
+    [longBreakout, shortBreakout]

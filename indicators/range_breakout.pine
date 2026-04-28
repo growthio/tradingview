@@ -17,7 +17,7 @@
 
 indicator("Range Breakout", overlay = true)
 
-import ZenithClown/rangeBreakout/1 as rangeBreakout
+import ZenithClown/rangeBreakout/6 as rangeBreakout
 
 // ------------------------------------------------------------------
 // INPUT(s) for Range Selection | Group Name: Range Window
@@ -67,11 +67,55 @@ rangeBgColor = input.color(
 )
 
 // ------------------------------------------------------------------
+// INPUT(s) for Volume Profiling | Group Name: Volume Settings
+// ------------------------------------------------------------------
+volumeMultiplier = input.float(
+    1.5, "Volume Multiplier"
+    , group = "Volume Settings", inline = "VOLS"
+)
+
+volumeLookback = input.int(
+    5, "Volume Lookback Period"
+    , group = "Volume Settings", inline = "VOLS"
+)
+
+// ------------------------------------------------------------------
+// INPUT(s) for Entry/Exit Points | Group Name: Mark Entry/Exit
+// ------------------------------------------------------------------
+markLongPosition = input.bool(
+    false, "Long Position"
+    , group = "Mark Entry/Exit (experimental)", inline = "MEE"
+)
+
+markShortPosition = input.bool(
+    false, "Short Position"
+    , group = "Mark Entry/Exit (experimental)", inline = "MEE"
+)
+
+// ------------------------------------------------------------------
 // Call `rangeBreakout()` and Draw on Chart with Overlay Setting
 // ------------------------------------------------------------------
-
 [rangeHi, rangeLo, inTrackRange] = rangeBreakout.markRange(
     trackTimePeriod, drawTimePeriod, highLineColor, lowLineColor, middleLineColor, maxLookbackDays
 )
 
 bgcolor(showTrackingWindow and inTrackRange ? rangeBgColor : na, title = "Tracking Window")
+
+// ------------------------------------------------------------------
+// Calculation of Target/Stop Loss and Mark the Value on Chart
+// ------------------------------------------------------------------
+[longBreakout, shortBreakout] = rangeBreakout.volumeConfirmation(
+    trackTimePeriod, drawTimePeriod, maxLookbackDays, volumeLookback, volumeMultiplier
+)
+
+plotshape(
+    longBreakout and markLongPosition, title = "Long Position"
+    , style = shape.triangleup, text = "L"
+    , location = location.belowbar, color = color.black, size = size.tiny
+)
+
+plotshape(
+    shortBreakout and markShortPosition, title = "Short Position"
+    , style = shape.triangledown, text = "S"
+    , location = location.abovebar, color = color.black, size = size.tiny
+)
